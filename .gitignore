@@ -1,0 +1,26 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Maven / Java
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs & temp
+*.log
+*.bak
+*.tmp
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,170 @@
+name: CI & Distribution
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-rust-binaries:
+    name: Build Native Engine (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: nanoshade
+            asset_name: nanoshade-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: nanoshade.exe
+            asset_name: nanoshade-windows-x86_64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build Release Binary
+        run: cargo build --release --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Run Core Tests
+        run: cargo test --manifest-path nanoshade-core/Cargo.toml
+
+      - name: Prepare Binary Artifact
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp nanoshade-core/target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/${{ matrix.asset_name }}
+          cp nanoshade-core/target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/${{ matrix.binary_name }}
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: artifacts/*
+
+  integration-tests:
+    name: Integration Tests (${{ matrix.os }})
+    needs: build-rust-binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download Linux Binary
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-unknown-linux-gnu
+          path: dist
+
+      - name: Download Windows Binary
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-pc-windows-msvc
+          path: dist
+
+      - name: Test Native CLI Execution
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            chmod +x dist/nanoshade.exe || true
+            ./dist/nanoshade.exe --help
+          else
+            chmod +x dist/nanoshade
+            ./dist/nanoshade --help
+          fi
+
+  publish-and-release:
+    name: Publish Maven Plugin & Create Release
+    needs: [ build-rust-binaries, integration-tests ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: ossrh
+          server-username: OSSRH_USERNAME
+          server-password: OSSRH_PASSWORD
+
+      - name: Download Linux Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-unknown-linux-gnu
+          path: bin-linux
+
+      - name: Download Windows Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-pc-windows-msvc
+          path: bin-win
+
+      - name: Embed Binaries into Maven Plugin Resources
+        run: |
+          mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64
+          mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64
+          cp bin-linux/nanoshade nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
+          cp bin-win/nanoshade.exe nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64/nanoshade.exe
+          chmod +x nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
+
+      - name: Build Maven Plugin with Embedded Binaries
+        run: |
+          cd nanoshade-maven-plugin
+          mvn clean package -DskipTests
+
+      - name: Deploy to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd nanoshade-maven-plugin
+          mvn deploy -DskipTests \
+            -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }} || true
+
+      - name: Deploy to Maven Central (Sonatype OSSRH)
+        if: startsWith(github.ref, 'refs/tags/v') && env.OSSRH_USERNAME != ''
+        env:
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+        run: |
+          cd nanoshade-maven-plugin
+          mvn clean deploy -P release -DskipTests || echo "Central deploy step skipped if pending staging validation"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin-win/nanoshade-windows-x86_64.exe
+            bin-win/nanoshade.exe
+            bin-linux/nanoshade-linux-x86_64
+            bin-linux/nanoshade
+            nanoshade-maven-plugin/target/nanoshade-maven-plugin-*.jar
+          generate_release_notes: true

@@ -1,0 +1,80 @@
+package com.nanodev.nanoshade.plugin;
+
+import org.apache.maven.plugin.logging.Log;
+
+import java.io.File;
+import java.io.InputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+
+public class BinaryResolver {
+    private static final String GITHUB_RELEASE_BASE =
+            "https://github.com/NanoDev1488/NanoShade/releases/latest/download/";
+
+    public static File resolveBinary(String customPath, Log log) throws IOException {
+        if (customPath != null && !customPath.trim().isEmpty()) {
+            File custom = new File(customPath);
+            if (custom.exists()) {
+                return custom;
+            }
+            log.warn("Custom native binary path does not exist: " + customPath);
+        }
+
+        String os = System.getProperty("os.name").toLowerCase();
+        boolean isWindows = os.contains("win");
+        boolean isLinux = os.contains("linux");
+        boolean isMac = os.contains("mac");
+
+        String binName;
+        String resourcePath;
+        if (isWindows) {
+            binName = "nanoshade.exe";
+            resourcePath = "/binaries/windows-x86_64/nanoshade.exe";
+        } else if (isLinux) {
+            binName = "nanoshade";
+            resourcePath = "/binaries/linux-x86_64/nanoshade";
+        } else if (isMac) {
+            binName = "nanoshade-macos";
+            resourcePath = "/binaries/macos-x86_64/nanoshade";
+        } else {
+            throw new UnsupportedOperationException("Unsupported OS: " + os);
+        }
+
+        // 1. Проверяем локальный кэш пользователя ~/.nanoshade/bin/
+        String userHome = System.getProperty("user.home");
+        Path cacheDir = Paths.get(userHome, ".nanoshade", "bin");
+        Files.createDirectories(cacheDir);
+        File cachedBin = cacheDir.resolve(binName).toFile();
+        if (cachedBin.exists() && cachedBin.length() > 0) {
+            cachedBin.setExecutable(true);
+            return cachedBin;
+        }
+
+        // 2. Проверяем встроенный ресурс внутри плагина
+        try (InputStream in = BinaryResolver.class.getResourceAsStream(resourcePath)) {
+            if (in != null) {
+                log.info("Extracting embedded native binary for " + os + "...");
+                Files.copy(in, cachedBin.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                cachedBin.setExecutable(true);
+                return cachedBin;
+            }
+        }
+
+        // 3. Скачиваем последний релизный бинарник с GitHub Releases
+        String downloadUrl = GITHUB_RELEASE_BASE + binName;
+        log.info("Downloading native NanoShade binary from " + downloadUrl + " ...");
+        try (InputStream in = new URL(downloadUrl).openStream()) {
+            Files.copy(in, cachedBin.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            cachedBin.setExecutable(true);
+            log.info("Successfully downloaded and cached at " + cachedBin.getAbsolutePath());
+            return cachedBin;
+        } catch (Exception e) {
+            throw new IOException("Failed to resolve or download native NanoShade binary: " + e.getMessage(), e);
+        }
+    }
+}

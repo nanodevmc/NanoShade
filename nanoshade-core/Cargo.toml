@@ -1,0 +1,17 @@
+[package]
+name = "nanoshade"
+version = "1.0.0"
+edition = "2021"
+authors = ["NanoDev <t.me/WineSquad>"]
+description = "Ultra-fast native JVM bytecode relocator & tree shaker"
+
+[dependencies]
+zip = { version = "2.2.2", default-features = false, features = ["deflate"] }
+clap = { version = "4.5.20", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

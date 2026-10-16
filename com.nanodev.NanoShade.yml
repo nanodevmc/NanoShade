@@ -1,0 +1,25 @@
+app-id: com.nanodev.NanoShade
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: nanoshade
+finish-args:
+  - --filesystem=host
+  - --share=ipc
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/nanoshade/cargo
+
+modules:
+  - name: nanoshade
+    buildsystem: simple
+    build-commands:
+      - cargo build --release --manifest-path nanoshade-core/Cargo.toml
+      - install -Dm755 nanoshade-core/target/release/nanoshade /app/bin/nanoshade
+    sources:
+      - type: git
+        url: https://github.com/NanoDev1488/NanoShade.git
+        tag: v1.0.0
