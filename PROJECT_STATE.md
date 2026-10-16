@@ -25,4 +25,6 @@ NanoShade — нативная (Rust), потоковая замена maven-sha
   - Написан и проверен компиляцией `nanoshade-maven-plugin` с автоматическим резолвером нативных бинарников.
   - Оформлен Flatpak манифест `com.nanodev.NanoShade.yml` под Flathub.
   - Настроен матричный GitHub Actions CI/CD (.github/workflows/ci.yml) для Windows и Linux.
-  - Код запушен в ветку main, сборка запущена в CI.
+  - Добавлен сквозной автотест сборки реального плагина `NanoMarket` с помощью `nanoshade-maven-plugin`.
+  - Все тесты пройдены успешно (100% зелёный CI).
+  - Опубликован официальный релиз `v1.0.0` на GitHub Releases с готовыми артефактами.
