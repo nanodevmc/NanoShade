@@ -97,7 +97,7 @@ jobs:
           fi
 
   test-nanomarket-build:
-    name: Real-world Test: Build NanoMarket with NanoShade
+    name: Real-world Test (Build NanoMarket with NanoShade)
     needs: build-rust-binaries
     runs-on: ubuntu-latest
     steps:
@@ -122,7 +122,7 @@ jobs:
           name: binary-x86_64-pc-windows-msvc
           path: bin-win
 
-      - name: Embed Binaries & Install Maven Plugin locally
+      - name: Embed Binaries and Install Maven Plugin locally
         run: |
           mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64
           mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64
@@ -138,44 +138,7 @@ jobs:
 
       - name: Inject NanoShade into NanoMarket pom.xml
         run: |
-          python3 -c "
-          with open('test-nanomarket/pom.xml', 'r', encoding='utf-8') as f:
-              content = f.read()
-
-          plugin_xml = '''
-                      <plugin>
-                          <groupId>io.github.nanodev1488</groupId>
-                          <artifactId>nanoshade-maven-plugin</artifactId>
-                          <version>1.0.0</version>
-                          <executions>
-                              <execution>
-                                  <phase>package</phase>
-                                  <goals>
-                                      <goal>shade</goal>
-                                  </goals>
-                                  <configuration>
-                                      <treeShake>true</treeShake>
-                                      <relocations>
-                                          <relocation>
-                                              <pattern>io.nano.market</pattern>
-                                              <shadedPattern>io.nano.market.shaded</shadedPattern>
-                                          </relocation>
-                                      </relocations>
-                                  </configuration>
-                              </execution>
-                          </executions>
-                      </plugin>
-          '''
-          idx = content.find('</plugins>')
-          if idx != -1:
-              new_content = content[:idx] + plugin_xml + content[idx:]
-              with open('test-nanomarket/pom.xml', 'w', encoding='utf-8') as f:
-                  f.write(new_content)
-              print('Successfully injected NanoShade plugin into NanoMarket pom.xml')
-          else:
-              print('Could not find </plugins> in pom.xml')
-              exit(1)
-          "
+          python3 .github/scripts/inject_plugin.py
 
       - name: Build NanoMarket with NanoShade
         run: |
@@ -186,9 +149,9 @@ jobs:
         run: |
           ls -la test-nanomarket/target/
           if [ -f test-nanomarket/target/NanoMarket-2.0.0.jar ]; then
-            echo 'SUCCESS: NanoMarket-2.0.0.jar successfully built with NanoShade!'
+            echo "SUCCESS: NanoMarket-2.0.0.jar successfully built with NanoShade!"
           else
-            echo 'ERROR: Shaded artifact not found!'
+            echo "ERROR: Shaded artifact not found!"
             exit(1)
           fi
 
