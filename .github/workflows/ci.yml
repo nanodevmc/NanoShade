@@ -54,7 +54,7 @@ jobs:
           path: artifacts/*
 
   integration-tests:
-    name: Integration Tests (${{ matrix.os }})
+    name: CLI Integration Tests (${{ matrix.os }})
     needs: build-rust-binaries
     runs-on: ${{ matrix.os }}
     strategy:
@@ -96,9 +96,105 @@ jobs:
             ./dist/nanoshade --help
           fi
 
+  test-nanomarket-build:
+    name: Real-world Test: Build NanoMarket with NanoShade
+    needs: build-rust-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download Linux Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-unknown-linux-gnu
+          path: bin-linux
+
+      - name: Download Windows Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-pc-windows-msvc
+          path: bin-win
+
+      - name: Embed Binaries & Install Maven Plugin locally
+        run: |
+          mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64
+          mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64
+          cp bin-linux/nanoshade nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
+          cp bin-win/nanoshade.exe nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64/nanoshade.exe
+          chmod +x nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
+          cd nanoshade-maven-plugin
+          mvn clean install -DskipTests
+
+      - name: Clone NanoMarket
+        run: |
+          git clone --depth 1 https://github.com/NanoDev1488/NanoMarket.git test-nanomarket
+
+      - name: Inject NanoShade into NanoMarket pom.xml
+        run: |
+          python3 -c "
+          with open('test-nanomarket/pom.xml', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          plugin_xml = '''
+                      <plugin>
+                          <groupId>io.github.nanodev1488</groupId>
+                          <artifactId>nanoshade-maven-plugin</artifactId>
+                          <version>1.0.0</version>
+                          <executions>
+                              <execution>
+                                  <phase>package</phase>
+                                  <goals>
+                                      <goal>shade</goal>
+                                  </goals>
+                                  <configuration>
+                                      <treeShake>true</treeShake>
+                                      <relocations>
+                                          <relocation>
+                                              <pattern>io.nano.market</pattern>
+                                              <shadedPattern>io.nano.market.shaded</shadedPattern>
+                                          </relocation>
+                                      </relocations>
+                                  </configuration>
+                              </execution>
+                          </executions>
+                      </plugin>
+          '''
+          idx = content.find('</plugins>')
+          if idx != -1:
+              new_content = content[:idx] + plugin_xml + content[idx:]
+              with open('test-nanomarket/pom.xml', 'w', encoding='utf-8') as f:
+                  f.write(new_content)
+              print('Successfully injected NanoShade plugin into NanoMarket pom.xml')
+          else:
+              print('Could not find </plugins> in pom.xml')
+              exit(1)
+          "
+
+      - name: Build NanoMarket with NanoShade
+        run: |
+          cd test-nanomarket
+          mvn clean package -DskipTests
+
+      - name: Verify NanoMarket Shaded Artifact
+        run: |
+          ls -la test-nanomarket/target/
+          if [ -f test-nanomarket/target/NanoMarket-2.0.0.jar ]; then
+            echo 'SUCCESS: NanoMarket-2.0.0.jar successfully built with NanoShade!'
+          else
+            echo 'ERROR: Shaded artifact not found!'
+            exit(1)
+          fi
+
   publish-and-release:
     name: Publish Maven Plugin & Create Release
-    needs: [ build-rust-binaries, integration-tests ]
+    needs: [ build-rust-binaries, integration-tests, test-nanomarket-build ]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
 
