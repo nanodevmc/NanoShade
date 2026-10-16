@@ -160,6 +160,9 @@ jobs:
     needs: [ build-rust-binaries, integration-tests, test-nanomarket-build ]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout repository
