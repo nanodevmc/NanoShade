@@ -18,4 +18,11 @@ NanoShade — нативная (Rust), потоковая замена maven-sha
 - Релокация ресурсов: файлы в `META-INF/services/` переименовываются и их содержимое переписывается под новые пакеты.
 
 ## 4. Текущий статус
-- В процессе: реализация Rust-движка (ClassFile parser/rewriter, ZIP streamer, TreeShaker), Maven-плагина и CI/CD workflow.
+- Сделано:
+  - Создан публичный репозиторий `NanoDev1488/NanoShade`.
+  - Секреты OSSRH безопасно зашифрованы и добавлены в GitHub Secrets репозитория.
+  - Реализовано Rust-ядро (потоковый ClassFile parser/rewriter, ZIP streaming, Tree Shaker, Services relocator).
+  - Написан и проверен компиляцией `nanoshade-maven-plugin` с автоматическим резолвером нативных бинарников.
+  - Оформлен Flatpak манифест `com.nanodev.NanoShade.yml` под Flathub.
+  - Настроен матричный GitHub Actions CI/CD (.github/workflows/ci.yml) для Windows и Linux.
+  - Код запушен в ветку main, сборка запущена в CI.
