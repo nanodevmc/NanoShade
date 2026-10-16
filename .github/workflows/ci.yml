@@ -152,7 +152,7 @@ jobs:
             echo "SUCCESS: NanoMarket-2.0.0.jar successfully built with NanoShade!"
           else
             echo "ERROR: Shaded artifact not found!"
-            exit(1)
+            exit 1
           fi
 
   publish-and-release:
