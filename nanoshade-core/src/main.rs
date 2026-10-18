@@ -13,7 +13,7 @@ use jar::JarProcessor;
 #[derive(Parser, Debug)]
 #[command(name = "nanoshade")]
 #[command(author = "NanoDev <t.me/WineSquad>")]
-#[command(version = "1.0.0")]
+#[command(version = "1.0.1")]
 #[command(about = "Ultra-fast native JVM bytecode relocator & tree shaker", long_about = None)]
 struct Args {
     /// Входной JAR файл

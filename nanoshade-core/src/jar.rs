@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{Read, Write, Seek};
+use std::io::{Read, Write};
 use std::path::Path;
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
@@ -31,16 +31,30 @@ impl<'a> JarProcessor<'a> {
         }
     }
 
+    /// Проверка, является ли файл мусорной подписью безопасности JAR
+    fn is_signature_or_junk(path: &str) -> bool {
+        let p = path.to_ascii_uppercase();
+        if p.starts_with("META-INF/") {
+            if p.ends_with(".SF") || p.ends_with(".DSA") || p.ends_with(".RSA") || p.starts_with("META-INF/SIG-") {
+                return true;
+            }
+            if p.starts_with("META-INF/MAVEN/") {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn process<P: AsRef<Path>>(&self, input_path: P, output_path: P) -> Result<(), Box<dyn std::error::Error>> {
         let in_file = File::open(input_path)?;
         let mut archive = ZipArchive::new(in_file)?;
 
-        // Шаг 1: Сканирование точек входа и сбор классов (если включен tree-shaking)
         let mut entry_points = HashSet::new();
         for ep in &self.custom_entry_points {
             entry_points.insert(ep.clone());
         }
 
+        let mut service_providers = HashSet::new();
         let mut class_map: HashMap<String, ClassFile> = HashMap::new();
         let mut raw_files: HashMap<String, Vec<u8>> = HashMap::new();
 
@@ -49,7 +63,7 @@ impl<'a> JarProcessor<'a> {
             let mut file = archive.by_index(i)?;
             let file_name = file.name().to_string();
 
-            if file.is_dir() {
+            if file.is_dir() || Self::is_signature_or_junk(&file_name) {
                 continue;
             }
 
@@ -70,6 +84,13 @@ impl<'a> JarProcessor<'a> {
                     }
                 }
                 raw_files.insert(file_name, buffer);
+            } else if file_name.starts_with("META-INF/services/") {
+                if let Ok(text) = std::str::from_utf8(&buffer) {
+                    for cls in TreeShaker::extract_services_classes(text) {
+                        service_providers.insert(cls);
+                    }
+                }
+                raw_files.insert(file_name, buffer);
             } else if file_name.ends_with(".class") {
                 if let Ok(cf) = ClassFile::parse(&buffer) {
                     let internal_name = file_name.trim_end_matches(".class").to_string();
@@ -82,15 +103,16 @@ impl<'a> JarProcessor<'a> {
             }
         }
 
-        // Шаг 2: Tree-shaking (если активирован)
-        let reachable = if self.tree_shake {
-            let shaker = TreeShaker::new(entry_points, self.keep_prefixes.clone());
-            Some(shaker.compute_reachable(&class_map))
+        // Шаг 2: Tree-shaking (все неиспользуемые библиотеки)
+        let (reachable_opt, project_classes_opt) = if self.tree_shake {
+            let shaker = TreeShaker::new(entry_points, self.keep_prefixes.clone(), service_providers);
+            let (reach, proj) = shaker.compute_reachable(&class_map);
+            (Some(reach), Some(proj))
         } else {
-            None
+            (None, None)
         };
 
-        // Шаг 3: Запись выходного JAR
+        // Шаг 3: Запись оптимизированного JAR
         let out_file = File::create(output_path)?;
         let mut writer = ZipWriter::new(out_file);
         let options = SimpleFileOptions::default()
@@ -98,16 +120,17 @@ impl<'a> JarProcessor<'a> {
 
         let mut added_dirs = HashSet::new();
 
-        // 3.1. Запись отрелоцированных и отфильтрованных классов
+        // 3.1. Запись живых классов
         for (class_name, mut cf) in class_map {
-            if let Some(ref reach) = reachable {
-                // Если включен tree-shaking и класс не в графе достижимости:
-                // Проверяем: если класс принадлежит релоцируемой библиотеке и не достижим -> отсекаем его!
-                let is_relocated_target = self.relocator.rules.iter().any(|r| {
-                    class_name.starts_with(&r.from_slash)
-                });
-                if is_relocated_target && !reach.contains(&class_name) {
-                    continue; // Пропускаем мертвый класс!
+            if let Some(ref reach) = reachable_opt {
+                let is_project = project_classes_opt
+                    .as_ref()
+                    .map(|p| p.contains(&class_name))
+                    .unwrap_or(false);
+
+                // Если класс не в проекте и не достижим в графе вызовов -> ВЫРЕЗАЕМ!
+                if !is_project && !reach.contains(&class_name) {
+                    continue;
                 }
             }
 
@@ -115,8 +138,8 @@ impl<'a> JarProcessor<'a> {
             self.relocator.relocate_class(&mut cf);
 
             // Релоцируем имя файла
-            let original_file_name = format!("{}.class", class_name);
-            let relocated_file_name = format!("{}.class", self.relocator.relocate_path(&class_name));
+            let relocated_class_name = self.relocator.relocate_path(&class_name);
+            let relocated_file_name = format!("{}.class", relocated_class_name);
 
             // Обеспечиваем существование родительских директорий в ZIP
             if let Some(parent) = Path::new(&relocated_file_name).parent() {
@@ -132,19 +155,39 @@ impl<'a> JarProcessor<'a> {
             writer.write_all(&class_bytes)?;
         }
 
-        // 3.2. Запись остальных ресурсов и META-INF/services/
+        // 3.2. Запись ресурсов и META-INF/services/
         for (file_name, buffer) in raw_files {
             if file_name.starts_with("META-INF/services/") {
                 if let Ok(text) = std::str::from_utf8(&buffer) {
                     let (new_file_name, new_content, _) =
                         self.relocator.relocate_service_resource(&file_name, text);
-                    writer.start_file(new_file_name, options)?;
-                    writer.write_all(new_content.as_bytes())?;
+
+                    // Оставляем только те строки реализаций, которые живы (если включен tree-shaking)
+                    let filtered_lines: Vec<&str> = if let Some(ref reach) = reachable_opt {
+                        new_content
+                            .lines()
+                            .filter(|line| {
+                                let trimmed = line.trim();
+                                if trimmed.starts_with('#') || trimmed.is_empty() {
+                                    return true;
+                                }
+                                let slash = trimmed.replace('.', "/");
+                                reach.contains(&slash)
+                            })
+                            .collect()
+                    } else {
+                        new_content.lines().collect()
+                    };
+
+                    if !filtered_lines.is_empty() {
+                        writer.start_file(new_file_name, options)?;
+                        writer.write_all(filtered_lines.join("\n").as_bytes())?;
+                    }
                     continue;
                 }
             }
 
-            // Обычный ресурс (например, plugin.yml или картинка)
+            // Обычный ресурс
             let relocated_file_name = self.relocator.relocate_path(&file_name);
             writer.start_file(relocated_file_name, options)?;
             writer.write_all(&buffer)?;

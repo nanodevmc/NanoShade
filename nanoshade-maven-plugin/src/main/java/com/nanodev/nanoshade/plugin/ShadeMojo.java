@@ -19,6 +19,8 @@ import java.util.List;
 @Mojo(name = "shade", defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class ShadeMojo extends AbstractMojo {
 
+    public static final String PLUGIN_VERSION = "1.0.0";
+
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
@@ -40,6 +42,9 @@ public class ShadeMojo extends AbstractMojo {
     @Parameter(property = "nativeExecutable")
     private String nativeExecutable;
 
+    @Parameter(property = "useFlatpak", defaultValue = "false")
+    private boolean useFlatpak;
+
     @Parameter(property = "shadedArtifactAttached", defaultValue = "false")
     private boolean shadedArtifactAttached;
 
@@ -49,8 +54,16 @@ public class ShadeMojo extends AbstractMojo {
     @Parameter(property = "outputFile")
     private File outputFile;
 
+    @Parameter(property = "checkUpdates", defaultValue = "true")
+    private boolean checkUpdates;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+        // Проверка обновлений NanoShade
+        if (checkUpdates) {
+            UpdateChecker.checkForUpdates(PLUGIN_VERSION, getLog());
+        }
+
         File artifactFile = project.getArtifact().getFile();
         if (artifactFile == null || !artifactFile.exists()) {
             getLog().info("No primary artifact file found. Skipping NanoShade.");
@@ -78,11 +91,10 @@ public class ShadeMojo extends AbstractMojo {
         }
 
         try {
-            File binary = BinaryResolver.resolveBinary(nativeExecutable, getLog());
-            getLog().info("Using native NanoShade engine: " + binary.getAbsolutePath());
+            List<String> runnerCommand = BinaryResolver.resolveCommandLine(nativeExecutable, useFlatpak, getLog());
+            getLog().info("Executing NanoShade engine: " + String.join(" ", runnerCommand));
 
-            List<String> cmd = new ArrayList<>();
-            cmd.add(binary.getAbsolutePath());
+            List<String> cmd = new ArrayList<>(runnerCommand);
             cmd.add("--input");
             cmd.add(artifactFile.getAbsolutePath());
             cmd.add("--output");

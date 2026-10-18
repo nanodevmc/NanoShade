@@ -4,27 +4,20 @@
 NanoShade — нативная (Rust), потоковая замена maven-shade-plugin и jarjar для молниеносной релокации байткода JVM и tree-shaking на слабых машинах (<128 МБ RAM).
 
 ## 2. Структура
-- `nanoshade-core/`: Rust CLI-ядро (потоковый парсер/рерайтер class-файлов, zip I/O, tree-shaker).
-- `nanoshade-maven-plugin/`: Легковесный Maven Mojo wrapper под Windows/Linux.
+- `nanoshade-core/`: Rust CLI-ядро (потоковый парсер/рерайтер class-файлов, zip I/O, глобальный tree-shaker, JAR cleaner).
+- `nanoshade-maven-plugin/`: Легковесный Maven Mojo wrapper под Windows/Linux с UpdateChecker и Flatpak-поддержкой.
 - `com.nanodev.NanoShade.yml`: Flatpak-манифест для Flathub/Linux.
-- `.github/workflows/ci.yml`: Матричный CI (Windows/Ubuntu), тесты, релизы бинарников и публикация в GitHub Packages & Maven Central.
+- `.github/workflows/ci.yml`: Матричный CI (Windows/Ubuntu), тесты, автогенерация GPG, релизы бинарников и деплой в GitHub Packages и Central Portal.
 
 ## 3. Принятые решения
-- Ядро пишется на Rust: стриминговый ZIP без распаковки на диск, zero-allocation парсер constant pool JVM.
-- Память жестко ограничена: < 128 МБ RAM, работает мгновенно даже на Intel Pentium P4600.
-- Репозиторий: `NanoDev1488/NanoShade` (публичный).
-- Секреты OSSRH (Sonatype) загружены в GitHub Secrets через API.
-- Поддержка точек входа: `META-INF/MANIFEST.MF` (Main-Class), `plugin.yml` (Spigot/Paper) и кастомные флаги.
-- Релокация ресурсов: файлы в `META-INF/services/` переименовываются и их содержимое переписывается под новые пакеты.
+- Версия 1.0.1: автоматическое вырезание неиспользуемых классов ВСЕХ сторонних библиотек.
+- Сохранение рефлексии: LDC строки сканируются в Constant Pool живых классов для защиты Class.forName.
+- Чистка мусора: автоматическое удаление сигнатур META-INF/*.SF/DSA/RSA во избежание SecurityException.
+- Update Checker: асинхронная проверка обновлений с таймаутом (без краша при оффлайне).
+- Flatpak: запуск через `flatpak run com.nanodev.NanoShade` при указании `<useFlatpak>true</useFlatpak>`.
+- Maven Central Portal: интеграция `central-publishing-maven-plugin` под `central.sonatype.com`.
 
-## 4. Текущий статус
-- Сделано:
-  - Создан публичный репозиторий `NanoDev1488/NanoShade`.
-  - Секреты OSSRH безопасно зашифрованы и добавлены в GitHub Secrets репозитория.
-  - Реализовано Rust-ядро (потоковый ClassFile parser/rewriter, ZIP streaming, Tree Shaker, Services relocator).
-  - Написан и проверен компиляцией `nanoshade-maven-plugin` с автоматическим резолвером нативных бинарников.
-  - Оформлен Flatpak манифест `com.nanodev.NanoShade.yml` под Flathub.
-  - Настроен матричный GitHub Actions CI/CD (.github/workflows/ci.yml) для Windows и Linux.
-  - Добавлен сквозной автотест сборки реального плагина `NanoMarket` с помощью `nanoshade-maven-plugin`.
-  - Все тесты пройдены успешно (100% зелёный CI).
-  - Опубликован официальный релиз `v1.0.0` на GitHub Releases с готовыми артефактами.
+## 4. Текущий статус (v1.0.1)
+- Завершена реализация всех фичей версии 1.0.1.
+- Проверена компиляция плагина локально.
+- Готов релиз и пуш тега v1.0.1.

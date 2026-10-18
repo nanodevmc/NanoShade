@@ -4,19 +4,51 @@ import org.apache.maven.plugin.logging.Log;
 
 import java.io.File;
 import java.io.InputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class BinaryResolver {
     private static final String GITHUB_RELEASE_BASE =
             "https://github.com/NanoDev1488/NanoShade/releases/latest/download/";
+    public static final String FLATPAK_APP_ID = "com.nanodev.NanoShade";
 
-    public static File resolveBinary(String customPath, Log log) throws IOException {
+    public static List<String> resolveCommandLine(String customPath, boolean forceFlatpak, Log log) throws IOException {
+        String os = System.getProperty("os.name").toLowerCase();
+        boolean isLinux = os.contains("linux");
+
+        // 1. Проверяем режим Flatpak
+        if (forceFlatpak || (isLinux && isFlatpakInstalled(log))) {
+            log.info("Using Flatpak sandbox runner for NanoShade (" + FLATPAK_APP_ID + ")...");
+            List<String> cmd = new ArrayList<>();
+            cmd.add("flatpak");
+            cmd.add("run");
+            cmd.add(FLATPAK_APP_ID);
+            return cmd;
+        }
+
+        // 2. Нативный бинарник под текущую ОС
+        File bin = resolveNativeBinary(customPath, log);
+        return Collections.singletonList(bin.getAbsolutePath());
+    }
+
+    private static boolean isFlatpakInstalled(Log log) {
+        try {
+            Process process = new ProcessBuilder("flatpak", "info", FLATPAK_APP_ID).start();
+            int exit = process.waitFor();
+            return exit == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static File resolveNativeBinary(String customPath, Log log) throws IOException {
         if (customPath != null && !customPath.trim().isEmpty()) {
             File custom = new File(customPath);
             if (custom.exists()) {

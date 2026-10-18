@@ -13,7 +13,7 @@ plugin_xml = """
             <plugin>
                 <groupId>io.github.nanodev1488</groupId>
                 <artifactId>nanoshade-maven-plugin</artifactId>
-                <version>1.0.0</version>
+                <version>1.0.1</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

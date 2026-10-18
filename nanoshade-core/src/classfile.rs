@@ -349,19 +349,30 @@ impl ClassFile {
     }
 
     /// Извлечь все имена классов, на которые ссылается данный класс (для Tree Shaking)
+    /// Включая LDC строковые константы для защиты рефлексии (Class.forName)
     pub fn extract_referenced_classes(&self) -> HashSet<String> {
         let mut refs = HashSet::new();
         for entry in &self.constant_pool {
-            if let CpEntry::Class { name_index } = entry {
-                if let Some(CpEntry::Utf8(name)) = self.constant_pool.get(*name_index as usize) {
-                    // Игнорируем массивы примитивов типа [B, [I
-                    let clean = name.trim_start_matches('[');
-                    if let Some(stripped) = clean.strip_prefix('L') {
-                        refs.insert(stripped.trim_end_matches(';').to_string());
-                    } else if !clean.is_empty() {
-                        refs.insert(clean.to_string());
+            match entry {
+                CpEntry::Class { name_index } => {
+                    if let Some(CpEntry::Utf8(name)) = self.constant_pool.get(*name_index as usize) {
+                        let clean = name.trim_start_matches('[');
+                        if let Some(stripped) = clean.strip_prefix('L') {
+                            refs.insert(stripped.trim_end_matches(';').to_string());
+                        } else if !clean.is_empty() {
+                            refs.insert(clean.to_string());
+                        }
                     }
                 }
+                CpEntry::String { string_index } => {
+                    // Проверяем строковые литералы на имена классов (Reflection)
+                    if let Some(CpEntry::Utf8(val)) = self.constant_pool.get(*string_index as usize) {
+                        if val.contains('.') || val.contains('/') {
+                            refs.insert(val.replace('.', "/"));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         refs
