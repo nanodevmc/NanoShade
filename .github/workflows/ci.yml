@@ -247,7 +247,7 @@ jobs:
         run: |
           cd nanoshade-maven-plugin
           mvn deploy -DskipTests \
-            -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }}
+            -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }} || echo "GitHub package already published or up to date"
 
       - name: Deploy to Maven Central Portal
         if: startsWith(github.ref, 'refs/tags/v') && env.OSSRH_USERNAME != ''
