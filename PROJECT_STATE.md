@@ -19,5 +19,7 @@ NanoShade — нативная (Rust), потоковая замена maven-sha
 
 ## 4. Текущий статус (v1.0.1)
 - Завершена реализация всех фичей версии 1.0.1.
-- Проверена компиляция плагина локально.
-- Готов релиз и пуш тега v1.0.1.
+- Полная мультиархитектурная матрица: Linux x86_64, Linux ARM64, Android ARM64 (Termux NDK r26b), Windows x86_64, Windows ARM64, macOS ARM64 (Apple Silicon).
+- Встроенный Update Checker (OTA) и автоматический мультиархитектурный BinaryResolver протестированы и работают.
+- Релиз v1.0.1 успешно опубликован в GitHub Releases и GitHub Packages.
+- Подготовлен бандл nanoshade-bundle-1.0.1.zip для Central Portal.
