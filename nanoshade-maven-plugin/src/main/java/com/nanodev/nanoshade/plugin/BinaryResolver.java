@@ -33,7 +33,7 @@ public class BinaryResolver {
             return cmd;
         }
 
-        // 2. Нативный бинарник под текущую ОС
+        // 2. Нативный бинарник под текущую ОС и архитектуру
         File bin = resolveNativeBinary(customPath, log);
         return Collections.singletonList(bin.getAbsolutePath());
     }
@@ -58,6 +58,9 @@ public class BinaryResolver {
         }
 
         String os = System.getProperty("os.name").toLowerCase();
+        String arch = System.getProperty("os.arch").toLowerCase();
+        boolean isArm = arch.contains("aarch64") || arch.contains("arm64");
+
         boolean isWindows = os.contains("win");
         boolean isLinux = os.contains("linux");
         boolean isMac = os.contains("mac");
@@ -65,16 +68,31 @@ public class BinaryResolver {
         String binName;
         String resourcePath;
         if (isWindows) {
-            binName = "nanoshade.exe";
-            resourcePath = "/binaries/windows-x86_64/nanoshade.exe";
+            if (isArm) {
+                binName = "nanoshade-windows-arm64.exe";
+                resourcePath = "/binaries/windows-arm64/nanoshade.exe";
+            } else {
+                binName = "nanoshade.exe";
+                resourcePath = "/binaries/windows-x86_64/nanoshade.exe";
+            }
         } else if (isLinux) {
-            binName = "nanoshade";
-            resourcePath = "/binaries/linux-x86_64/nanoshade";
+            if (isArm) {
+                binName = "nanoshade-linux-arm64";
+                resourcePath = "/binaries/linux-arm64/nanoshade";
+            } else {
+                binName = "nanoshade";
+                resourcePath = "/binaries/linux-x86_64/nanoshade";
+            }
         } else if (isMac) {
-            binName = "nanoshade-macos";
-            resourcePath = "/binaries/macos-x86_64/nanoshade";
+            if (isArm) {
+                binName = "nanoshade-macos-arm64";
+                resourcePath = "/binaries/macos-arm64/nanoshade";
+            } else {
+                binName = "nanoshade-macos-x86_64";
+                resourcePath = "/binaries/macos-x86_64/nanoshade";
+            }
         } else {
-            throw new UnsupportedOperationException("Unsupported OS: " + os);
+            throw new UnsupportedOperationException("Unsupported OS: " + os + " / Arch: " + arch);
         }
 
         // 1. Проверяем локальный кэш пользователя ~/.nanoshade/bin/
@@ -90,23 +108,23 @@ public class BinaryResolver {
         // 2. Проверяем встроенный ресурс внутри плагина
         try (InputStream in = BinaryResolver.class.getResourceAsStream(resourcePath)) {
             if (in != null) {
-                log.info("Extracting embedded native binary for " + os + "...");
+                log.info("Extracting embedded native binary for " + os + " (" + arch + ")...");
                 Files.copy(in, cachedBin.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 cachedBin.setExecutable(true);
                 return cachedBin;
             }
         }
 
-        // 3. Скачиваем последний релизный бинарник с GitHub Releases
+        // 3. Скачиваем релизный бинарник под текущую архитектуру с GitHub Releases
         String downloadUrl = GITHUB_RELEASE_BASE + binName;
-        log.info("Downloading native NanoShade binary from " + downloadUrl + " ...");
+        log.info("Downloading native NanoShade binary for " + os + " (" + arch + ") from " + downloadUrl + " ...");
         try (InputStream in = new URL(downloadUrl).openStream()) {
             Files.copy(in, cachedBin.toPath(), StandardCopyOption.REPLACE_EXISTING);
             cachedBin.setExecutable(true);
             log.info("Successfully downloaded and cached at " + cachedBin.getAbsolutePath());
             return cachedBin;
         } catch (Exception e) {
-            throw new IOException("Failed to resolve or download native NanoShade binary: " + e.getMessage(), e);
+            throw new IOException("Failed to resolve or download native NanoShade binary for " + os + " (" + arch + "): " + e.getMessage(), e);
         }
     }
 }

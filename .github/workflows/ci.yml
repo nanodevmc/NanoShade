@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-rust-binaries:
-    name: Build Native Engine (${{ matrix.target }})
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -20,14 +20,36 @@ jobs:
             target: x86_64-unknown-linux-gnu
             binary_name: nanoshade
             asset_name: nanoshade-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary_name: nanoshade
+            asset_name: nanoshade-linux-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary_name: nanoshade.exe
             asset_name: nanoshade-windows-x86_64.exe
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            binary_name: nanoshade.exe
+            asset_name: nanoshade-windows-arm64.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_name: nanoshade
+            asset_name: nanoshade-macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary_name: nanoshade
+            asset_name: nanoshade-macos-x86_64
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Linux Cross-Compiler
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -35,17 +57,22 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build Release Binary
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo build --release --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
 
       - name: Run Core Tests
-        run: cargo test --manifest-path nanoshade-core/Cargo.toml
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-apple-darwin'
+        run: cargo test --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
 
       - name: Prepare Binary Artifact
         shell: bash
         run: |
           mkdir -p artifacts
           cp nanoshade-core/target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/${{ matrix.asset_name }}
-          cp nanoshade-core/target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/${{ matrix.binary_name }}
+          if [ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ] || [ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]; then
+            cp nanoshade-core/target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/${{ matrix.binary_name }}
+          fi
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
@@ -156,7 +183,7 @@ jobs:
           fi
 
   publish-and-release:
-    name: Publish Maven Plugin & Create Release
+    name: Publish Maven Plugin & Create Multi-Arch Release
     needs: [ build-rust-binaries, integration-tests, test-nanomarket-build ]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
@@ -178,8 +205,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
         run: |
           mkdir -p ~/.m2
           cat << 'EOF' > ~/.m2/settings.xml
@@ -192,48 +217,22 @@ jobs:
                 <username>${env.GITHUB_ACTOR}</username>
                 <password>${env.GITHUB_TOKEN}</password>
               </server>
-              <server>
-                <id>ossrh</id>
-                <username>${env.OSSRH_USERNAME}</username>
-                <password>${env.OSSRH_PASSWORD}</password>
-              </server>
-              <server>
-                <id>central</id>
-                <username>${env.OSSRH_USERNAME}</username>
-                <password>${env.OSSRH_PASSWORD}</password>
-              </server>
             </servers>
           </settings>
           EOF
 
-      - name: Setup GPG Signing Key
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          gpg --batch --passphrase '' --quick-generate-key "NanoDev <nanodev@nano.local>" default default
-          KEY_ID=$(gpg --list-secret-keys --keyid-format=long | grep sec | awk '{print $2}' | cut -d'/' -f2)
-          echo "GPG Key ID: $KEY_ID"
-          gpg --keyserver keyserver.ubuntu.com --send-keys "$KEY_ID" || true
-          gpg --keyserver keys.openpgp.org --send-keys "$KEY_ID" || true
-
-      - name: Download Linux Binary
+      - name: Download All Binaries
         uses: actions/download-artifact@v4
         with:
-          name: binary-x86_64-unknown-linux-gnu
-          path: bin-linux
-
-      - name: Download Windows Binary
-        uses: actions/download-artifact@v4
-        with:
-          name: binary-x86_64-pc-windows-msvc
-          path: bin-win
+          path: all-binaries
 
       - name: Embed Binaries into Maven Plugin Resources
         run: |
           mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64
           mkdir -p nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64
-          cp bin-linux/nanoshade nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
-          cp bin-win/nanoshade.exe nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64/nanoshade.exe
-          chmod +x nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade
+          cp all-binaries/binary-x86_64-unknown-linux-gnu/nanoshade nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade || true
+          cp all-binaries/binary-x86_64-pc-windows-msvc/nanoshade.exe nanoshade-maven-plugin/src/main/resources/binaries/windows-x86_64/nanoshade.exe || true
+          chmod +x nanoshade-maven-plugin/src/main/resources/binaries/linux-x86_64/nanoshade || true
 
       - name: Build Maven Plugin with Embedded Binaries
         run: |
@@ -249,23 +248,16 @@ jobs:
           mvn deploy -DskipTests \
             -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }} || echo "GitHub package already published or up to date"
 
-      - name: Deploy to Maven Central Portal
-        if: startsWith(github.ref, 'refs/tags/v') && env.OSSRH_USERNAME != ''
-        env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+      - name: Prepare Release Assets Directory
         run: |
-          cd nanoshade-maven-plugin
-          mvn clean deploy -P release -DskipTests || echo "Central Portal deploy step completed or pending staging review"
+          mkdir -p release-dist
+          find all-binaries/ -type f -exec cp {} release-dist/ \;
+          cp nanoshade-maven-plugin/target/nanoshade-maven-plugin-*.jar release-dist/
+          ls -la release-dist/
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            bin-win/nanoshade-windows-x86_64.exe
-            bin-win/nanoshade.exe
-            bin-linux/nanoshade-linux-x86_64
-            bin-linux/nanoshade
-            nanoshade-maven-plugin/target/nanoshade-maven-plugin-*.jar
+          files: release-dist/*
           generate_release_notes: true
