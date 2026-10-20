@@ -61,13 +61,21 @@ public class BinaryResolver {
         String arch = System.getProperty("os.arch").toLowerCase();
         boolean isArm = arch.contains("aarch64") || arch.contains("arm64");
 
+        // Проверка среды Android / Termux
+        boolean isAndroid = System.getProperty("java.vendor", "").toLowerCase().contains("android")
+                || System.getenv("PREFIX") != null && System.getenv("PREFIX").contains("com.termux")
+                || new File("/data/data/com.termux").exists();
+
         boolean isWindows = os.contains("win");
         boolean isLinux = os.contains("linux");
         boolean isMac = os.contains("mac");
 
         String binName;
         String resourcePath;
-        if (isWindows) {
+        if (isAndroid) {
+            binName = "nanoshade-android-arm64";
+            resourcePath = "/binaries/android-arm64/nanoshade";
+        } else if (isWindows) {
             if (isArm) {
                 binName = "nanoshade-windows-arm64.exe";
                 resourcePath = "/binaries/windows-arm64/nanoshade.exe";

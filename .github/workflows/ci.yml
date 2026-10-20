@@ -24,6 +24,10 @@ jobs:
             target: aarch64-unknown-linux-gnu
             binary_name: nanoshade
             asset_name: nanoshade-linux-arm64
+          - os: ubuntu-latest
+            target: aarch64-linux-android
+            binary_name: nanoshade
+            asset_name: nanoshade-android-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary_name: nanoshade.exe
@@ -36,10 +40,6 @@ jobs:
             target: aarch64-apple-darwin
             binary_name: nanoshade
             asset_name: nanoshade-macos-arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            binary_name: nanoshade
-            asset_name: nanoshade-macos-x86_64
 
     steps:
       - name: Checkout repository
@@ -51,6 +51,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
+      - name: Setup Android NDK
+        if: matrix.target == 'aarch64-linux-android'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -59,7 +65,14 @@ jobs:
       - name: Build Release Binary
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android24-clang
+        run: |
+          if [ "${{ matrix.target }}" == "aarch64-linux-android" ]; then
+            export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+            cargo build --release --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
+          else
+            cargo build --release --manifest-path nanoshade-core/Cargo.toml --target ${{ matrix.target }}
+          fi
 
       - name: Run Core Tests
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-apple-darwin'
