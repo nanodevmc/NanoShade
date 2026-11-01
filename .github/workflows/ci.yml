@@ -174,9 +174,8 @@ jobs:
           mvn clean install -DskipTests
 
       - name: Clone NanoMarket
-        continue-on-error: true
         run: |
-          git clone --depth 1 https://github.com/NanoDev1488/NanoMarket.git test-nanomarket || echo "NanoMarket repo not accessible, skipping e2e"
+          git clone --depth 1 https://github.com/nanodevmc/NanoMarket.git test-nanomarket
 
       - name: Inject NanoShade into NanoMarket pom.xml
         continue-on-error: true
