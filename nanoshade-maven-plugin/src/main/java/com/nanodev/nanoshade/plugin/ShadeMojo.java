@@ -19,7 +19,7 @@ import java.util.List;
 @Mojo(name = "shade", defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class ShadeMojo extends AbstractMojo {
 
-    public static final String PLUGIN_VERSION = "1.0.0";
+    public static final String PLUGIN_VERSION = "1.0.2";
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;

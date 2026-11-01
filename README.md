@@ -60,7 +60,7 @@ nanoshade --help
 <plugin>
     <groupId>io.github.nanodevmc</groupId>
     <artifactId>nanoshade-maven-plugin</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <executions>
         <execution>
             <phase>package</phase>

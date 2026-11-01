@@ -1,6 +1,6 @@
 [package]
 name = "nanoshade"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 authors = ["NanoDev <t.me/WineSquad>"]
 description = "Ultra-fast native JVM bytecode relocator & tree shaker"
