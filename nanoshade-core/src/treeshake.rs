@@ -101,20 +101,59 @@ impl TreeShaker {
         None
     }
 
-    /// Извлечь main / bootstrapper из plugin.yml
+    /// Извлечь main / bootstrapper / loader из plugin.yml или paper-plugin.yml
     pub fn extract_plugin_yml_main(plugin_yml: &str) -> Vec<String> {
         let mut result = Vec::new();
         for line in plugin_yml.lines() {
             let trimmed = line.trim();
             if let Some(main) = trimmed.strip_prefix("main:") {
                 let clean = main.trim().trim_matches('\'').trim_matches('"');
-                result.push(clean.replace('.', "/"));
+                if !clean.is_empty() {
+                    result.push(clean.replace('.', "/"));
+                }
             } else if let Some(bootstrapper) = trimmed.strip_prefix("bootstrapper:") {
                 let clean = bootstrapper.trim().trim_matches('\'').trim_matches('"');
-                result.push(clean.replace('.', "/"));
+                if !clean.is_empty() {
+                    result.push(clean.replace('.', "/"));
+                }
+            } else if let Some(loader) = trimmed.strip_prefix("loader:") {
+                let clean = loader.trim().trim_matches('\'').trim_matches('"');
+                if !clean.is_empty() {
+                    result.push(clean.replace('.', "/"));
+                }
             }
         }
         result
+    }
+
+    /// Релоцировать точки входа прямо внутри plugin.yml / paper-plugin.yml
+    pub fn relocate_plugin_yml(plugin_yml: &str, relocator: &crate::relocator::Relocator) -> String {
+        let mut out_lines = Vec::new();
+        for line in plugin_yml.lines() {
+            let trimmed = line.trim();
+            if let Some(main_val) = trimmed.strip_prefix("main:") {
+                let clean = main_val.trim().trim_matches('\'').trim_matches('"');
+                let slash = clean.replace('.', "/");
+                let relocated = relocator.relocate_path(&slash).replace('/', ".");
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out_lines.push(format!("{}main: {}", indent, relocated));
+            } else if let Some(boot_val) = trimmed.strip_prefix("bootstrapper:") {
+                let clean = boot_val.trim().trim_matches('\'').trim_matches('"');
+                let slash = clean.replace('.', "/");
+                let relocated = relocator.relocate_path(&slash).replace('/', ".");
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out_lines.push(format!("{}bootstrapper: {}", indent, relocated));
+            } else if let Some(loader_val) = trimmed.strip_prefix("loader:") {
+                let clean = loader_val.trim().trim_matches('\'').trim_matches('"');
+                let slash = clean.replace('.', "/");
+                let relocated = relocator.relocate_path(&slash).replace('/', ".");
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out_lines.push(format!("{}loader: {}", indent, relocated));
+            } else {
+                out_lines.push(line.to_string());
+            }
+        }
+        out_lines.join("\n")
     }
 
     /// Извлечь классы провайдеров из META-INF/services/
@@ -145,10 +184,23 @@ mod tests {
 
     #[test]
     fn test_extract_plugin_yml() {
-        let plugin_yml = "name: NanoPlugin\nversion: 1.0.1\nmain: com.nanodev.nano.NanoPlugin\n";
+        let plugin_yml = "name: NanoPlugin\nversion: 1.0.1\nmain: com.nanodev.nano.NanoPlugin\nloader: com.nanodev.nano.CustomLoader\n";
         assert_eq!(
             TreeShaker::extract_plugin_yml_main(plugin_yml),
-            vec!["com/nanodev/nano/NanoPlugin".to_string()]
+            vec![
+                "com/nanodev/nano/NanoPlugin".to_string(),
+                "com/nanodev/nano/CustomLoader".to_string()
+            ]
         );
+    }
+
+    #[test]
+    fn test_relocate_plugin_yml() {
+        use crate::relocator::{RelocationRule, Relocator};
+        let plugin_yml = "name: NanoPlugin\nmain: com.zaxxer.hikari.HikariConfig\nbootstrapper: com.zaxxer.hikari.Boot\n";
+        let relocator = Relocator::new(vec![RelocationRule::new("com.zaxxer.hikari", "com.nanodev.libs.hikari")]);
+        let relocated = TreeShaker::relocate_plugin_yml(plugin_yml, &relocator);
+        assert!(relocated.contains("main: com.nanodev.libs.hikari.HikariConfig"));
+        assert!(relocated.contains("bootstrapper: com.nanodev.libs.hikari.Boot"));
     }
 }

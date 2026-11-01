@@ -11,7 +11,7 @@ with open(target_pom, "r", encoding="utf-8") as f:
 
 plugin_xml = """
             <plugin>
-                <groupId>io.github.nanodev1488</groupId>
+                <groupId>io.github.nanodevmc</groupId>
                 <artifactId>nanoshade-maven-plugin</artifactId>
                 <version>1.0.1</version>
                 <executions>

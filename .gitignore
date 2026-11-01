@@ -19,6 +19,8 @@ release.properties
 *.log
 *.bak
 *.tmp
+*.zip
+*.tar.gz
 .idea/
 *.iml
 .vscode/

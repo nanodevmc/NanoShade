@@ -3,14 +3,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.nanodev1488</groupId>
+    <groupId>io.github.nanodevmc</groupId>
     <artifactId>nanoshade-maven-plugin</artifactId>
     <version>1.0.1</version>
     <packaging>maven-plugin</packaging>
 
     <name>NanoShade Maven Plugin</name>
     <description>Ultra-fast native JVM bytecode relocator &amp; tree shaker wrapper for Maven</description>
-    <url>https://github.com/NanoDev1488/NanoShade</url>
+    <url>https://github.com/nanodevmc/NanoShade</url>
 
     <licenses>
         <license>
@@ -30,9 +30,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/NanoDev1488/NanoShade.git</connection>
-        <developerConnection>scm:git:ssh://github.com/NanoDev1488/NanoShade.git</developerConnection>
-        <url>https://github.com/NanoDev1488/NanoShade</url>
+        <connection>scm:git:git://github.com/nanodevmc/NanoShade.git</connection>
+        <developerConnection>scm:git:ssh://github.com/nanodevmc/NanoShade.git</developerConnection>
+        <url>https://github.com/nanodevmc/NanoShade</url>
     </scm>
 
     <properties>

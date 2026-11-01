@@ -14,6 +14,8 @@ pub struct JarProcessor<'a> {
     pub tree_shake: bool,
     pub custom_entry_points: Vec<String>,
     pub keep_prefixes: Vec<String>,
+    pub strip_multi_release: bool,
+    pub minimize_resources: bool,
 }
 
 impl<'a> JarProcessor<'a> {
@@ -22,18 +24,45 @@ impl<'a> JarProcessor<'a> {
         tree_shake: bool,
         custom_entry_points: Vec<String>,
         keep_prefixes: Vec<String>,
+        strip_multi_release: bool,
+        minimize_resources: bool,
     ) -> Self {
         Self {
             relocator,
             tree_shake,
             custom_entry_points,
             keep_prefixes,
+            strip_multi_release,
+            minimize_resources,
         }
     }
 
-    /// Проверка, является ли файл мусорной подписью безопасности JAR
-    fn is_signature_or_junk(path: &str) -> bool {
+    /// Проверка, является ли файл мусорной подписью безопасности JAR или мусорным ресурсом
+    fn is_signature_or_junk(path: &str, strip_mr: bool, minimize: bool) -> bool {
         let p = path.to_ascii_uppercase();
+
+        // Multi-Release JAR stripping: META-INF/versions/9/..., META-INF/versions/11/...
+        if strip_mr && p.starts_with("META-INF/VERSIONS/") {
+            return true;
+        }
+
+        // Мусорные лицензии, README, дубликаты module-info при минимизации
+        if minimize {
+            if p == "MODULE-INFO.CLASS" || p.ends_with("/MODULE-INFO.CLASS") {
+                return true;
+            }
+            if p.starts_with("META-INF/") {
+                if p.ends_with(".TXT")
+                    || p.ends_with(".MD")
+                    || p.contains("LICENSE")
+                    || p.contains("NOTICE")
+                    || p.contains("COPYRIGHT")
+                {
+                    return true;
+                }
+            }
+        }
+
         if p.starts_with("META-INF/") {
             if p.ends_with(".SF") || p.ends_with(".DSA") || p.ends_with(".RSA") || p.starts_with("META-INF/SIG-") {
                 return true;
@@ -55,6 +84,7 @@ impl<'a> JarProcessor<'a> {
         }
 
         let mut service_providers = HashSet::new();
+        let mut service_providers_merged: HashMap<String, HashSet<String>> = HashMap::new();
         let mut class_map: HashMap<String, ClassFile> = HashMap::new();
         let mut raw_files: HashMap<String, Vec<u8>> = HashMap::new();
 
@@ -63,7 +93,7 @@ impl<'a> JarProcessor<'a> {
             let mut file = archive.by_index(i)?;
             let file_name = file.name().to_string();
 
-            if file.is_dir() || Self::is_signature_or_junk(&file_name) {
+            if file.is_dir() || Self::is_signature_or_junk(&file_name, self.strip_multi_release, self.minimize_resources) {
                 continue;
             }
 
@@ -77,20 +107,27 @@ impl<'a> JarProcessor<'a> {
                     }
                 }
                 raw_files.insert(file_name, buffer);
-            } else if file_name == "plugin.yml" {
+            } else if file_name == "plugin.yml" || file_name == "paper-plugin.yml" {
                 if let Ok(plugin_text) = std::str::from_utf8(&buffer) {
                     for main in TreeShaker::extract_plugin_yml_main(plugin_text) {
                         entry_points.insert(main);
                     }
+                    // Умная авто-релокация полей внутри манифеста плагина
+                    let relocated_yaml = TreeShaker::relocate_plugin_yml(plugin_text, self.relocator);
+                    raw_files.insert(file_name, relocated_yaml.into_bytes());
+                } else {
+                    raw_files.insert(file_name, buffer);
                 }
-                raw_files.insert(file_name, buffer);
             } else if file_name.starts_with("META-INF/services/") {
                 if let Ok(text) = std::str::from_utf8(&buffer) {
                     for cls in TreeShaker::extract_services_classes(text) {
-                        service_providers.insert(cls);
+                        service_providers.insert(cls.clone());
+                        service_providers_merged
+                            .entry(file_name.clone())
+                            .or_default()
+                            .insert(cls);
                     }
                 }
-                raw_files.insert(file_name, buffer);
             } else if file_name.ends_with(".class") {
                 if let Ok(cf) = ClassFile::parse(&buffer) {
                     let internal_name = file_name.trim_end_matches(".class").to_string();
@@ -155,38 +192,34 @@ impl<'a> JarProcessor<'a> {
             writer.write_all(&class_bytes)?;
         }
 
-        // 3.2. Запись ресурсов и META-INF/services/
-        for (file_name, buffer) in raw_files {
-            if file_name.starts_with("META-INF/services/") {
-                if let Ok(text) = std::str::from_utf8(&buffer) {
-                    let (new_file_name, new_content, _) =
-                        self.relocator.relocate_service_resource(&file_name, text);
+        // 3.2. Запись объединенных META-INF/services/ с дедупликацией и релокацией
+        for (file_name, impls) in service_providers_merged {
+            let (new_file_name, _, _) = self.relocator.relocate_service_resource(&file_name, "");
 
-                    // Оставляем только те строки реализаций, которые живы (если включен tree-shaking)
-                    let filtered_lines: Vec<&str> = if let Some(ref reach) = reachable_opt {
-                        new_content
-                            .lines()
-                            .filter(|line| {
-                                let trimmed = line.trim();
-                                if trimmed.starts_with('#') || trimmed.is_empty() {
-                                    return true;
-                                }
-                                let slash = trimmed.replace('.', "/");
-                                reach.contains(&slash)
-                            })
-                            .collect()
-                    } else {
-                        new_content.lines().collect()
-                    };
-
-                    if !filtered_lines.is_empty() {
-                        writer.start_file(new_file_name, options)?;
-                        writer.write_all(filtered_lines.join("\n").as_bytes())?;
+            let mut out_impls: Vec<String> = Vec::new();
+            for impl_slash in impls {
+                if let Some(ref reach) = reachable_opt {
+                    if !reach.contains(&impl_slash) {
+                        continue;
                     }
-                    continue;
+                }
+                let relocated_slash = self.relocator.relocate_path(&impl_slash);
+                let relocated_dot = relocated_slash.replace('/', ".");
+                if !out_impls.contains(&relocated_dot) {
+                    out_impls.push(relocated_dot);
                 }
             }
 
+            if !out_impls.is_empty() {
+                out_impls.sort();
+                writer.start_file(new_file_name, options)?;
+                writer.write_all(out_impls.join("\n").as_bytes())?;
+                writer.write_all(b"\n")?;
+            }
+        }
+
+        // 3.3. Запись остальных ресурсов
+        for (file_name, buffer) in raw_files {
             // Обычный ресурс
             let relocated_file_name = self.relocator.relocate_path(&file_name);
             writer.start_file(relocated_file_name, options)?;
@@ -195,5 +228,29 @@ impl<'a> JarProcessor<'a> {
 
         writer.finish()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_signature_and_junk_detection() {
+        assert!(JarProcessor::is_signature_or_junk("META-INF/CODESIGN.SF", false, false));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/CODESIGN.RSA", false, false));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/maven/pom.xml", false, false));
+
+        // Multi-release stripping
+        assert!(!JarProcessor::is_signature_or_junk("META-INF/versions/9/module-info.class", false, false));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/versions/9/module-info.class", true, false));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/versions/17/com/example/Helper.class", true, false));
+
+        // Resource minimization
+        assert!(!JarProcessor::is_signature_or_junk("META-INF/LICENSE.txt", false, false));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/LICENSE.txt", false, true));
+        assert!(JarProcessor::is_signature_or_junk("META-INF/NOTICE", false, true));
+        assert!(JarProcessor::is_signature_or_junk("module-info.class", false, true));
+        assert!(!JarProcessor::is_signature_or_junk("com/example/MyClass.class", true, true));
     }
 }

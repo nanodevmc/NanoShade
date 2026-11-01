@@ -14,7 +14,26 @@
 - **Очистка от мусора и сжатие**: Удаление конфликтующих подписей безопасности (`META-INF/*.SF`, `*.DSA`, `*.RSA`), лишних Maven-манифестов и максимальное сжатие Deflate.
 - **Встроенный Update Checker**: Уведомляет прямо в консоли Maven, если вышла более свежая версия плагина (с таймаутом и защитой от оффлайна).
 - **Поддержка Flatpak**: Возможность запускать процесс релокации внутри Flatpak-песочницы через параметр `<useFlatpak>true</useFlatpak>`.
-- **Кроссплатформенность**: Готовые нативные бинарники под Windows (`nanoshade.exe`) и Linux (`nanoshade`).
+- **Кроссплатформенность & Termux**: Готовые нативные бинарники под Windows (`nanoshade.exe`), Linux (`nanoshade`), macOS (Apple Silicon), а также **Android Termux** (`nanoshade-android-arm64`).
+
+---
+
+## 📱 Использование в Android (Termux)
+
+NanoShade полностью оптимизирован для работы в среде **Termux**:
+
+### Установка готового бинарника в Termux:
+```bash
+# Скачивание нативного бинарника под архитектуру Android ARM64
+curl -L -o $PREFIX/bin/nanoshade https://github.com/nanodevmc/NanoShade/releases/latest/download/nanoshade-android-arm64
+chmod +x $PREFIX/bin/nanoshade
+
+# Проверка работы
+nanoshade --help
+```
+
+### Автоматическая работа через Maven Plugin в Termux:
+Плагин `nanoshade-maven-plugin` автоматически определяет среду Termux (по переменной `PREFIX` и пути `/data/data/com.termux`), сам скачивает нужный Android ARM64 бинарник в `~/.nanoshade/bin/` и выполняет релокацию без ручной настройки!
 
 ---
 
@@ -27,11 +46,11 @@
 <pluginRepositories>
     <pluginRepository>
         <id>github</id>
-        <url>https://maven.pkg.github.com/NanoDev1488/NanoShade</url>
+        <url>https://maven.pkg.github.com/nanodevmc/NanoShade</url>
     </pluginRepository>
 </pluginRepositories>
 ```
-*(Для Maven Central Portal после синхронизации namespace `io.github.nanodev1488` сторонние репозитории указывать не требуется).*
+*(Для Maven Central Portal после синхронизации namespace `io.github.nanodevmc` сторонние репозитории указывать не требуется).*
 
 ### 2. Подключение плагина NanoShade
 
@@ -39,7 +58,7 @@
 
 ```xml
 <plugin>
-    <groupId>io.github.nanodev1488</groupId>
+    <groupId>io.github.nanodevmc</groupId>
     <artifactId>nanoshade-maven-plugin</artifactId>
     <version>1.0.1</version>
     <executions>
@@ -102,7 +121,7 @@ flatpak run com.nanodev.NanoShade --input app.jar --output app-shaded.jar --relo
 
 ## 💻 Использование через нативный CLI
 
-Готовые бинарники доступны в [GitHub Releases](https://github.com/NanoDev1488/NanoShade/releases/latest).
+Готовые бинарники доступны в [GitHub Releases](https://github.com/nanodevmc/NanoShade/releases/latest).
 
 ```cmd
 nanoshade --input app.jar --output app-shaded.jar --relocate com.zaxxer.hikari=com.nanodev.libs.hikari --tree-shake

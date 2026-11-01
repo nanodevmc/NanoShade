@@ -39,6 +39,18 @@ struct Args {
     /// Префиксы пакетов/классов, которые всегда сохраняются при tree-shaking
     #[arg(long = "keep")]
     keep_prefixes: Vec<String>,
+
+    /// Вырезать Multi-Release JAR дубликаты (META-INF/versions/9..21)
+    #[arg(long = "strip-multi-release", default_value_t = false)]
+    strip_multi_release: bool,
+
+    /// Удалять мусорные лицензии, NOTICE, README и module-info.class
+    #[arg(long = "minimize-resources", default_value_t = false)]
+    minimize_resources: bool,
+
+    /// Включить инкрементальный кэш (~/.nanoshade/cache/)
+    #[arg(long = "cache", default_value_t = false)]
+    cache: bool,
 }
 
 fn parse_relocation_rule(raw: &str) -> Option<RelocationRule> {
@@ -84,7 +96,23 @@ fn main() {
         args.tree_shake,
         args.entry_points,
         args.keep_prefixes,
+        args.strip_multi_release,
+        args.minimize_resources,
     );
+
+    // Поддержка инкрементального кэширования
+    let cache_dir = if args.cache {
+        std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .ok()
+            .map(|h| std::path::PathBuf::from(h).join(".nanoshade").join("cache"))
+    } else {
+        None
+    };
+
+    if let Some(ref cdir) = cache_dir {
+        std::fs::create_dir_all(cdir).ok();
+    }
 
     match processor.process(&args.input, &args.output) {
         Ok(()) => {

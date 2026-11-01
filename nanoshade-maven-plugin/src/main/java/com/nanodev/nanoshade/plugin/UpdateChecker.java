@@ -8,7 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class UpdateChecker {
-    private static final String REPO_API = "https://api.github.com/repos/NanoDev1488/NanoShade/releases/latest";
+    private static final String REPO_API = "https://api.github.com/repos/nanodevmc/NanoShade/releases/latest";
 
     /**
      * Асинхронная проверка обновлений с жестким таймаутом, чтобы не тормозить сборку на слабых машинах
@@ -43,7 +43,7 @@ public class UpdateChecker {
                             log.warn("[NanoShade] Вы используете устаревшую версию плагина: " + currentVersion);
                             log.warn("[NanoShade] Доступна новая версия: " + latestTag);
                             log.warn("[NanoShade] Рекомендуется обновить <version>" + latestTag + "</version> в pom.xml");
-                            log.warn("[NanoShade] Подробнее: https://github.com/NanoDev1488/NanoShade/releases/latest");
+                            log.warn("[NanoShade] Подробнее: https://github.com/nanodevmc/NanoShade/releases/latest");
                             log.warn("================================================================");
                         }
                     }

@@ -17,9 +17,7 @@ NanoShade — нативная (Rust), потоковая замена maven-sha
 - Flatpak: запуск через `flatpak run com.nanodev.NanoShade` при указании `<useFlatpak>true</useFlatpak>`.
 - Maven Central Portal: интеграция `central-publishing-maven-plugin` под `central.sonatype.com`.
 
-## 4. Текущий статус (v1.0.1)
-- Завершена реализация всех фичей версии 1.0.1.
-- Полная мультиархитектурная матрица: Linux x86_64, Linux ARM64, Android ARM64 (Termux NDK r26b), Windows x86_64, Windows ARM64, macOS ARM64 (Apple Silicon).
-- Встроенный Update Checker (OTA) и автоматический мультиархитектурный BinaryResolver протестированы и работают.
-- Релиз v1.0.1 успешно опубликован в GitHub Releases и GitHub Packages.
-- Подготовлен бандл nanoshade-bundle-1.0.1.zip для Central Portal.
+## 4. Текущий статус (v1.0.1 / v1.0.2 dev)
+- Android Termux ARM64: нативная сборка и интеграция подтверждена на реальном устройстве пользователя (EryBuyer v3 собрался за 35.63ms!).
+- v1.0.2 (локально): SPI merge, Multi-Release strip, Resource minimizer, smart plugin.yml relocator, инкрементальный кэш.
+- GitHub аккаунт пользователя временно заблокирован: коммиты и пуши на паузе до разблокировки.

@@ -16,7 +16,7 @@ import java.util.List;
 
 public class BinaryResolver {
     private static final String GITHUB_RELEASE_BASE =
-            "https://github.com/NanoDev1488/NanoShade/releases/latest/download/";
+            "https://github.com/nanodevmc/NanoShade/releases/latest/download/";
     public static final String FLATPAK_APP_ID = "com.nanodev.NanoShade";
 
     public static List<String> resolveCommandLine(String customPath, boolean forceFlatpak, Log log) throws IOException {

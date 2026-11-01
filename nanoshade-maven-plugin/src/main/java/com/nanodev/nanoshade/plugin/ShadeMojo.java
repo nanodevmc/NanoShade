@@ -57,6 +57,15 @@ public class ShadeMojo extends AbstractMojo {
     @Parameter(property = "checkUpdates", defaultValue = "true")
     private boolean checkUpdates;
 
+    @Parameter(property = "stripMultiRelease", defaultValue = "true")
+    private boolean stripMultiRelease;
+
+    @Parameter(property = "minimizeResources", defaultValue = "false")
+    private boolean minimizeResources;
+
+    @Parameter(property = "cache", defaultValue = "false")
+    private boolean cache;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         // Проверка обновлений NanoShade
@@ -123,6 +132,18 @@ public class ShadeMojo extends AbstractMojo {
                     cmd.add("--keep");
                     cmd.add(k);
                 }
+            }
+
+            if (stripMultiRelease) {
+                cmd.add("--strip-multi-release");
+            }
+
+            if (minimizeResources) {
+                cmd.add("--minimize-resources");
+            }
+
+            if (cache) {
+                cmd.add("--cache");
             }
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
